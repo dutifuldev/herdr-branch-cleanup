@@ -21,7 +21,8 @@ reason, on the status board.
 ## Requirements
 
 - Herdr ≥ 0.7.0
-- `python3` (3.10+), `git`, and `gh` (authenticated: `gh auth status`) on PATH
+- `cargo` (Rust toolchain, for the one-time build on install)
+- `git` and `gh` (authenticated: `gh auth status`) on PATH
 
 ## Install
 
@@ -29,9 +30,11 @@ reason, on the status board.
 herdr plugin install dutifuldev/herdr-branch-cleanup
 ```
 
-Or link a local checkout for development:
+Herdr runs `cargo build --release` once during install. For a local checkout,
+build it yourself and link:
 
 ```sh
+cargo build --release
 herdr plugin link /path/to/herdr-branch-cleanup
 ```
 

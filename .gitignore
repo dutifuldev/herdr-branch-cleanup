@@ -1,10 +1,5 @@
-__pycache__/
-*.pyc
-.venv/
-.pytest_cache/
-.ruff_cache/
-.coverage
-coverage.xml
-mutants/
+target/
+mutants.out/
+mutants.out.old/
 .state/
-dist/
+CLAUDE.md

@@ -10,21 +10,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
-      - run: uv sync --frozen
-      - run: uv run ruff format --check .
-      - run: uv run ruff check .
-      - run: uv run ty check src
-      - run: uv run pytest --cov=src/herdr_branch_cleanup --cov-fail-under=85
-      - name: Mutation testing behind the kill-rate floor
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt, llvm-tools-preview
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,cargo-mutants,cargo-audit
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo check --all-targets
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo build --release
+      - run: cargo llvm-cov --fail-under-lines 85
+      # cargo mutants exits nonzero when a mutant survives; scope is .cargo/mutants.toml
+      - run: cargo mutants
+      - run: cargo audit
+      - name: Slophammer (pin exact; bump both lines together on upgrades)
         run: |
-          set -euo pipefail
-          uv run mutmut run 2>&1 | tee /tmp/mutmut.log
-          uv run python scripts/check_mutation.py --min-kill-rate 90 --stats-file /tmp/mutmut.log
-      - name: Audit dependencies
-        run: |
-          uv export --frozen --no-emit-project -o /tmp/requirements.txt
-          uvx pip-audit -r /tmp/requirements.txt --disable-pip
-      # Keep the slophammer-py pin exact; bump both lines together on upgrades.
-      - run: uvx --from slophammer-py==0.4.0 slophammer-py dry .
-      - run: uvx --from slophammer-py==0.4.0 slophammer-py check .
+          cargo install slophammer-rs --version 0.4.0 --locked
+          slophammer-rs dry .
+          slophammer-rs check .

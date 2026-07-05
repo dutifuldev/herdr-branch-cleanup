@@ -1,0 +1,3 @@
+# Mutate only the pure decision logic; adapters are subprocess plumbing whose
+# behavior is pinned by their unit tests directly.
+examine_globs = ["src/core.rs"]

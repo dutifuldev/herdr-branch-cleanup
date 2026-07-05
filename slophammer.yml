@@ -1,10 +1,10 @@
-python:
+rust:
   coverage:
     threshold: 85
-    paths:
-      - src
   complexity:
-    max: 8
+    cognitive_max: 8
+  targets:
+    - src
   dry:
     max_findings: 0
     paths:
@@ -12,34 +12,11 @@ python:
     copied_blocks:
       enabled: true
       min_tokens: 100
+  unsafe:
+    policy: forbid
   mutation:
     targets:
-      - src/herdr_branch_cleanup/core.py
+      - src/core.rs
   dependency_boundaries:
-    - from: src/herdr_branch_cleanup/core.py
+    - from: .
       allow: []
-    - from: src/herdr_branch_cleanup/procio.py
-      allow: []
-    - from: src/herdr_branch_cleanup/gitio.py
-      allow:
-        - src/herdr_branch_cleanup/procio
-    - from: src/herdr_branch_cleanup/herdrio.py
-      allow:
-        - src/herdr_branch_cleanup/procio
-    - from: src/herdr_branch_cleanup/sweep.py
-      allow:
-        - src/herdr_branch_cleanup/core
-        - src/herdr_branch_cleanup/gitio
-        - src/herdr_branch_cleanup/herdrio
-        - src/herdr_branch_cleanup/procio
-    - from: src/herdr_branch_cleanup/daemon.py
-      allow:
-        - src/herdr_branch_cleanup/sweep
-    - from: src/herdr_branch_cleanup/board.py
-      allow:
-        - src/herdr_branch_cleanup/sweep
-    - from: src/herdr_branch_cleanup/cli.py
-      allow:
-        - src/herdr_branch_cleanup/board
-        - src/herdr_branch_cleanup/daemon
-        - src/herdr_branch_cleanup/sweep
