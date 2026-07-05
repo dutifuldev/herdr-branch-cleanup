@@ -33,13 +33,26 @@ reason, on the status board.
 herdr plugin install dutifuldev/herdr-branch-cleanup
 ```
 
-Herdr runs `cargo build --release` once during install. For a local checkout,
-build it yourself and link:
+Herdr runs `cargo build --release` once during install. To pin a released
+revision instead of tracking `main`:
+
+```sh
+herdr plugin install dutifuldev/herdr-branch-cleanup --ref v0.2.0
+```
+
+For a local checkout, build it yourself and link:
 
 ```sh
 cargo build --release
 herdr plugin link /path/to/herdr-branch-cleanup
 ```
+
+The plugin is listed on the [Herdr marketplace](https://herdr.dev/plugins/),
+and the binary is also published on
+[crates.io](https://crates.io/crates/herdr-branch-cleanup). Note that
+`cargo install herdr-branch-cleanup` gives you only the standalone binary —
+installing through Herdr is what registers the actions, the board pane, and
+the autostart hooks.
 
 The poller starts itself the first time a pane opens in any session. No daemon
 setup is needed; it runs as a plain background process managed through the
