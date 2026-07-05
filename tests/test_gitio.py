@@ -1,8 +1,7 @@
 import json
 
-from tests.conftest import FakeRunner
-
 from herdr_branch_cleanup import gitio
+from tests.conftest import FakeRunner
 
 
 class TestRepoRoot:

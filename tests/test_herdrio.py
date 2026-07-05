@@ -1,8 +1,7 @@
 import json
 
-from tests.conftest import FakeRunner
-
 from herdr_branch_cleanup import herdrio
+from tests.conftest import FakeRunner
 
 
 def pane_list_payload(panes):

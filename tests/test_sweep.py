@@ -1,9 +1,8 @@
 import json
 
-from tests.conftest import FakeRunner
-
 from herdr_branch_cleanup import sweep
 from herdr_branch_cleanup.herdrio import Pane
+from tests.conftest import FakeRunner
 
 AUTO = sweep.Settings(dry_run=False, notify_only=False)
 DRY = sweep.Settings(dry_run=True, notify_only=False)
