@@ -101,13 +101,43 @@ pub fn last_known_remote_sha(run: &dyn Runner, root: &str, branch: &str) -> Stri
     }
 }
 
+/// One remote round-trip answering both "does the branch still exist" and
+/// "what is the authoritative default branch". The local `origin/HEAD` guess
+/// can be stale (e.g. after a default-branch rename), so checkout targets
+/// must come from here, never from the local symbolic ref.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteProbe {
+    pub branch_exists: bool,
+    pub default_branch: String,
+}
+
 /// None means the remote could not be reached; callers must not act on it.
-pub fn remote_branch_exists(run: &dyn Runner, root: &str, branch: &str) -> Option<bool> {
+pub fn remote_probe(run: &dyn Runner, root: &str, branch: &str) -> Option<RemoteProbe> {
+    let reference = format!("refs/heads/{branch}");
     let result = run.run(
-        &git(root, &["ls-remote", "--heads", "origin", branch]),
+        &git(
+            root,
+            &["ls-remote", "--symref", "origin", "HEAD", &reference],
+        ),
         None,
     );
-    result.ok().then(|| !result.stdout.trim().is_empty())
+    if !result.ok() {
+        return None;
+    }
+    let mut probe = RemoteProbe {
+        branch_exists: false,
+        default_branch: String::new(),
+    };
+    for line in result.stdout.lines() {
+        if let Some(rest) = line.strip_prefix("ref: refs/heads/") {
+            if let Some(default) = rest.split_whitespace().next() {
+                probe.default_branch = default.to_owned();
+            }
+        } else if line.ends_with(&reference) {
+            probe.branch_exists = true;
+        }
+    }
+    Some(probe)
 }
 
 pub fn merged_pr_head_sha(run: &dyn Runner, root: &str, branch: &str) -> String {
@@ -144,17 +174,21 @@ fn parse_pr_head(payload: &str) -> String {
         .to_owned()
 }
 
+fn first_line(text: &str) -> &str {
+    text.lines().next().unwrap_or("").trim()
+}
+
 /// Switch to the default branch and fast-forward it. None on success.
 pub fn checkout_default(run: &dyn Runner, root: &str, default: &str) -> Option<String> {
     let checkout = run.run(&git(root, &["checkout", default]), None);
     if !checkout.ok() {
-        return Some(format!("checkout failed: {}", checkout.stderr.trim()));
+        return Some(format!("checkout failed: {}", first_line(&checkout.stderr)));
     }
     let pull = run.run(&git(root, &["pull", "--ff-only"]), None);
     if !pull.ok() {
         return Some(format!(
             "checked out {default}, but pull failed: {}",
-            pull.stderr.trim()
+            first_line(&pull.stderr)
         ));
     }
     None
@@ -315,21 +349,59 @@ mod tests {
     }
 
     #[test]
-    fn remote_branch_exists_true() {
-        let run = FakeRunner::new().on("ls-remote --heads", 0, "abc\trefs/heads/feature\n", "");
-        assert_eq!(remote_branch_exists(&run, "/repo", "feature"), Some(true));
+    fn remote_probe_branch_exists_with_default() {
+        let output = "ref: refs/heads/main\tHEAD\nabc\tHEAD\ndef\trefs/heads/feature\n";
+        let run = FakeRunner::new().on("ls-remote --symref origin HEAD", 0, output, "");
+        assert_eq!(
+            remote_probe(&run, "/repo", "feature"),
+            Some(RemoteProbe {
+                branch_exists: true,
+                default_branch: "main".to_owned(),
+            })
+        );
     }
 
     #[test]
-    fn remote_branch_exists_false_when_deleted() {
-        let run = FakeRunner::new().on("ls-remote --heads", 0, "", "");
-        assert_eq!(remote_branch_exists(&run, "/repo", "feature"), Some(false));
+    fn remote_probe_branch_deleted() {
+        let output = "ref: refs/heads/main\tHEAD\nabc\tHEAD\n";
+        let run = FakeRunner::new().on("ls-remote --symref origin HEAD", 0, output, "");
+        assert_eq!(
+            remote_probe(&run, "/repo", "feature"),
+            Some(RemoteProbe {
+                branch_exists: false,
+                default_branch: "main".to_owned(),
+            })
+        );
     }
 
     #[test]
-    fn remote_branch_exists_none_when_unreachable() {
-        let run = FakeRunner::new().on("ls-remote --heads", 128, "", "");
-        assert_eq!(remote_branch_exists(&run, "/repo", "feature"), None);
+    fn remote_probe_none_when_unreachable() {
+        let run = FakeRunner::new().on("ls-remote --symref origin HEAD", 128, "", "");
+        assert_eq!(remote_probe(&run, "/repo", "feature"), None);
+    }
+
+    #[test]
+    fn remote_probe_missing_symref_yields_empty_default() {
+        let output = "abc\tHEAD\ndef\trefs/heads/feature\n";
+        let run = FakeRunner::new().on("ls-remote --symref origin HEAD", 0, output, "");
+        assert_eq!(
+            remote_probe(&run, "/repo", "feature"),
+            Some(RemoteProbe {
+                branch_exists: true,
+                default_branch: String::new(),
+            })
+        );
+    }
+
+    #[test]
+    fn remote_probe_does_not_confuse_similarly_named_branch() {
+        // refs/heads/feature-x must not count as refs/heads/feature.
+        let output = "ref: refs/heads/main\tHEAD\nabc\tHEAD\ndef\trefs/heads/feature-x\n";
+        let run = FakeRunner::new().on("ls-remote --symref origin HEAD", 0, output, "");
+        assert_eq!(
+            remote_probe(&run, "/repo", "feature").map(|probe| probe.branch_exists),
+            Some(false)
+        );
     }
 
     #[test]

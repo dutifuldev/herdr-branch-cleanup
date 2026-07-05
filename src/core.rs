@@ -58,6 +58,9 @@ pub struct LocalFacts {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteFacts {
     pub branch_exists: bool,
+    /// The remote's actual default branch; the local `origin/HEAD` guess in
+    /// `LocalFacts` can be stale, so checkout targets must use this one.
+    pub remote_default_branch: String,
     pub merged_pr_head_sha: String,
     pub last_known_remote_sha: String,
 }
@@ -110,6 +113,9 @@ pub fn has_unpushed_work(local: &LocalFacts, remote: &RemoteFacts, fate: Fate) -
 
 /// Safety gates: the branch is gone, but switching now would be unsafe.
 pub fn hold_reason(local: &LocalFacts, remote: &RemoteFacts, fate: Fate) -> Option<String> {
+    if remote.remote_default_branch.is_empty() {
+        return Some("cannot determine the remote default branch".to_owned());
+    }
     if local.linked_worktree {
         return Some("linked worktree, the branch is its identity".to_owned());
     }
@@ -142,6 +148,15 @@ pub fn decide(local: &LocalFacts, remote: &RemoteFacts) -> Decision {
             action: ActionKind::Skip,
             fate,
             reason: "branch still exists on the remote".to_owned(),
+        };
+    }
+    if local.branch == remote.remote_default_branch {
+        // The local origin/HEAD guess disagreed with the remote; we are
+        // already where cleanup would put us, so there is nothing to do.
+        return Decision {
+            action: ActionKind::Skip,
+            fate,
+            reason: "already on the remote default branch".to_owned(),
         };
     }
     if let Some(hold) = hold_reason(local, remote, fate) {
@@ -190,6 +205,7 @@ mod tests {
     fn remote() -> RemoteFacts {
         RemoteFacts {
             branch_exists: true,
+            remote_default_branch: "main".to_owned(),
             merged_pr_head_sha: String::new(),
             last_known_remote_sha: "abc123".to_owned(),
         }
@@ -485,6 +501,142 @@ mod tests {
         let decision = decide(&local(), &facts);
         assert_eq!(decision.action, ActionKind::Checkout);
         assert_eq!(decision.fate, Fate::Merged);
+    }
+
+    // --- Edge cases: merged PR while local work never reached GitHub ---
+    // Policy for all of these: never switch; HOLD with a reason the board
+    // shows. Nothing is lost and the user decides.
+
+    #[test]
+    fn merged_but_new_commits_added_after_push_holds() {
+        // PR merged at abc123, then the user kept committing locally.
+        let facts = RemoteFacts {
+            merged_pr_head_sha: "abc123".to_owned(),
+            ..remote()
+        };
+        let local = LocalFacts {
+            tip_sha: "def456".to_owned(),
+            ..local()
+        };
+        let decision = decide(&local, &facts);
+        assert_eq!(decision.action, ActionKind::Hold);
+        assert_eq!(
+            decision.reason,
+            "local tip does not match the last commit GitHub saw"
+        );
+    }
+
+    #[test]
+    fn merged_but_local_tip_amended_or_rebased_holds() {
+        // Same mechanics as extra commits: an amend/rebase rewrites the sha,
+        // so the tip no longer matches what GitHub merged.
+        let facts = RemoteFacts {
+            merged_pr_head_sha: "abc123".to_owned(),
+            ..remote()
+        };
+        let local = LocalFacts {
+            tip_sha: "amended0".to_owned(),
+            ..local()
+        };
+        assert_eq!(decide(&local, &facts).action, ActionKind::Hold);
+    }
+
+    #[test]
+    fn merged_but_local_tip_behind_pr_head_holds() {
+        // The local checkout never pulled the branch's last pushed commits.
+        // Everything local IS on GitHub, but proving ancestry needs history
+        // the sweep does not read, so we stay conservative and hold.
+        let facts = RemoteFacts {
+            merged_pr_head_sha: "newer99".to_owned(),
+            ..remote()
+        };
+        let local = LocalFacts {
+            tip_sha: "older11".to_owned(),
+            ..local()
+        };
+        assert_eq!(decide(&local, &facts).action, ActionKind::Hold);
+    }
+
+    #[test]
+    fn branch_reused_after_old_merged_pr_holds() {
+        // An old PR from this branch was merged, then the branch was reused
+        // for new work (it exists on the remote again). Merged wins over
+        // alive in fate detection, but the unpushed gate holds because the
+        // new local tip does not match the old PR head.
+        let facts = RemoteFacts {
+            branch_exists: true,
+            merged_pr_head_sha: "oldhead1".to_owned(),
+            ..remote()
+        };
+        let local = LocalFacts {
+            tip_sha: "newwork2".to_owned(),
+            ..local()
+        };
+        let decision = decide(&local, &facts);
+        assert_eq!(decision.action, ActionKind::Hold);
+        assert_eq!(decision.fate, Fate::Merged);
+    }
+
+    #[test]
+    fn merged_with_unreadable_local_tip_holds() {
+        // rev-parse HEAD failed; an empty tip can never match the PR head.
+        let facts = RemoteFacts {
+            merged_pr_head_sha: "abc123".to_owned(),
+            ..remote()
+        };
+        let local = LocalFacts {
+            tip_sha: String::new(),
+            ..local()
+        };
+        assert_eq!(decide(&local, &facts).action, ActionKind::Hold);
+    }
+
+    #[test]
+    fn merged_and_dirty_and_unpushed_reports_dirty_first() {
+        // Gate order is fixed: worktree, busy agents, dirty, unpushed.
+        let facts = RemoteFacts {
+            merged_pr_head_sha: "other".to_owned(),
+            ..remote()
+        };
+        let local = LocalFacts {
+            dirty: true,
+            ..local()
+        };
+        assert_eq!(
+            hold_reason(&local, &facts, Fate::Merged).as_deref(),
+            Some("working tree has uncommitted changes")
+        );
+    }
+
+    #[test]
+    fn unknown_remote_default_branch_holds() {
+        // Without an authoritative default branch there is no safe checkout
+        // target, no matter how clean the repo is.
+        let facts = RemoteFacts {
+            merged_pr_head_sha: "abc123".to_owned(),
+            remote_default_branch: String::new(),
+            ..remote()
+        };
+        let decision = decide(&local(), &facts);
+        assert_eq!(decision.action, ActionKind::Hold);
+        assert_eq!(
+            decision.reason,
+            "cannot determine the remote default branch"
+        );
+    }
+
+    #[test]
+    fn stale_local_origin_head_does_not_mask_remote_default() {
+        // The local origin/HEAD guess says the default is another branch,
+        // but the remote says the pane already sits on the true default.
+        let facts = RemoteFacts {
+            branch_exists: false,
+            remote_default_branch: "feature".to_owned(),
+            ..remote()
+        };
+        let decision = decide(&local(), &facts);
+        assert_eq!(decision.action, ActionKind::Skip);
+        assert_eq!(decision.reason, "already on the remote default branch");
     }
 
     #[test]

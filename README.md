@@ -14,6 +14,9 @@ finishes). For each repo it acts only when every safety gate passes:
   compares against the merged PR's head, not `git branch --merged`)
 - the checkout is not a linked git worktree (there the branch is the
   worktree's identity, so the repo is only flagged, never switched)
+- the checkout target is the remote's actual default branch (from
+  `ls-remote --symref origin HEAD`), never the local `origin/HEAD` guess,
+  which can be stale after a default-branch rename
 
 When a gate fails, nothing happens; the repo shows up as held, with the
 reason, on the status board.

@@ -63,9 +63,10 @@ pub fn local_facts(run: &dyn Runner, root: &str, panes: &[Pane]) -> LocalFacts {
 
 /// None when the remote is unreachable; the repo is skipped this cycle.
 pub fn remote_facts(run: &dyn Runner, root: &str, branch: &str) -> Option<RemoteFacts> {
-    let exists = gitio::remote_branch_exists(run, root, branch)?;
+    let probe = gitio::remote_probe(run, root, branch)?;
     Some(RemoteFacts {
-        branch_exists: exists,
+        branch_exists: probe.branch_exists,
+        remote_default_branch: probe.default_branch,
         merged_pr_head_sha: gitio::merged_pr_head_sha(run, root, branch),
         last_known_remote_sha: gitio::last_known_remote_sha(run, root, branch),
     })
@@ -81,12 +82,21 @@ pub fn sweep_repo(run: &dyn Runner, root: &str, panes: &[Pane], settings: Settin
         return report_for(&local, ActionKind::Skip, Fate::Unknown, reason, false);
     };
     let decision = core::decide(&local, &remote);
-    finish_report(run, &local, &decision, settings)
+    // The checkout target is the remote's authoritative default branch; the
+    // local origin/HEAD guess in `local.default_branch` can be stale.
+    finish_report(
+        run,
+        &local,
+        &remote.remote_default_branch,
+        &decision,
+        settings,
+    )
 }
 
 fn finish_report(
     run: &dyn Runner,
     local: &LocalFacts,
+    target_branch: &str,
     decision: &Decision,
     settings: Settings,
 ) -> RepoReport {
@@ -99,13 +109,15 @@ fn finish_report(
             false,
         );
     }
-    let (checked_out, reason) = apply_checkout(run, local, settings, &decision.reason);
+    let (checked_out, reason) =
+        apply_checkout(run, local, target_branch, settings, &decision.reason);
     report_for(local, decision.action, decision.fate, reason, checked_out)
 }
 
 fn apply_checkout(
     run: &dyn Runner,
     local: &LocalFacts,
+    target_branch: &str,
     settings: Settings,
     reason: &str,
 ) -> (bool, String) {
@@ -115,18 +127,12 @@ fn apply_checkout(
     if settings.dry_run {
         return (
             false,
-            format!(
-                "{reason} (dry run, would checkout {})",
-                local.default_branch
-            ),
+            format!("{reason} (dry run, would checkout {target_branch})"),
         );
     }
-    match gitio::checkout_default(run, &local.root, &local.default_branch) {
+    match gitio::checkout_default(run, &local.root, target_branch) {
         Some(error) => (false, format!("{reason}, but {error}")),
-        None => (
-            true,
-            format!("{reason}, checked out {}", local.default_branch),
-        ),
+        None => (true, format!("{reason}, checked out {target_branch}")),
     }
 }
 
@@ -223,7 +229,12 @@ mod tests {
             .on("--git-dir --git-common-dir", 0, ".git\n.git\n", "")
             .on("status --porcelain", 0, "", "")
             .on("rev-parse HEAD", 0, "abc123\n", "")
-            .on("ls-remote --heads", 0, "", "")
+            .on(
+                "ls-remote --symref",
+                0,
+                "ref: refs/heads/main\tHEAD\nef5b2e9\tHEAD\n",
+                "",
+            )
             .on("gh pr list", 0, r#"[{"headRefOid":"abc123"}]"#, "")
             .on("refs/remotes/origin/feature", 0, "abc123\n", "")
             .on("checkout main", 0, "", "")
@@ -312,14 +323,14 @@ mod tests {
         let report = sweep_repo(&run, "/repo", &[pane("/repo", "idle", "w1-1")], AUTO);
         assert_eq!(report.action, "skip");
         assert_eq!(report.reason, "already on default branch");
-        assert!(!called(&run, "ls-remote --heads"));
+        assert!(!called(&run, "ls-remote"));
     }
 
     #[test]
     fn unreachable_remote_skips() {
         let mut run = merged_branch_runner();
-        run.drop_response("ls-remote --heads");
-        let run = run.on("ls-remote --heads", 128, "", "");
+        run.drop_response("ls-remote --symref");
+        let run = run.on("ls-remote --symref", 128, "", "");
         let report = sweep_repo(&run, "/repo", &[pane("/repo", "idle", "w1-1")], AUTO);
         assert_eq!(report.action, "skip");
         assert_eq!(report.reason, "remote unreachable");
@@ -331,6 +342,25 @@ mod tests {
         let report = sweep_repo(&run, "/repo", &[pane("/repo", "working", "w1-1")], AUTO);
         assert_eq!(report.action, "hold");
         assert!(!report.checked_out);
+    }
+
+    #[test]
+    fn stale_local_origin_head_never_picks_checkout_target() {
+        // Regression: clones carried origin/HEAD pointing at a non-default
+        // branch, and the sweep checked out that wrong branch. The target
+        // must come from the remote probe, not the local symbolic ref.
+        let mut run = merged_branch_runner();
+        run.drop_response("symbolic-ref");
+        run.drop_response("checkout main");
+        let run =
+            run.on("symbolic-ref", 0, "origin/feature-b\n", "")
+                .on("checkout main", 0, "", "");
+        let report = sweep_repo(&run, "/repo", &[pane("/repo", "idle", "w1-1")], AUTO);
+        assert_eq!(report.action, "checkout");
+        assert!(report.checked_out);
+        assert!(report.reason.contains("checked out main"));
+        assert!(called(&run, "checkout main"));
+        assert!(!called(&run, "checkout feature-b"));
     }
 
     #[test]
