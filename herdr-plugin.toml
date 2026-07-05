@@ -1,0 +1,42 @@
+id = "branch-cleanup"
+name = "Branch Cleanup"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "Checks out the default branch in a pane's repo when its branch is merged or deleted on GitHub"
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "start"
+title = "Start branch cleanup poller"
+command = ["python3", "scripts/run.py", "start"]
+
+[[actions]]
+id = "stop"
+title = "Stop branch cleanup poller"
+command = ["python3", "scripts/run.py", "stop"]
+
+[[actions]]
+id = "toggle"
+title = "Toggle branch cleanup poller"
+command = ["python3", "scripts/run.py", "toggle"]
+
+[[actions]]
+id = "cleanup-now"
+title = "Run one cleanup sweep now"
+command = ["python3", "scripts/run.py", "once"]
+
+[[panes]]
+id = "board"
+title = "Branch cleanup"
+placement = "overlay"
+command = ["python3", "scripts/run.py", "board"]
+
+# Idempotent autostart: the first pane of any session boots the poller.
+[[events]]
+on = "pane.created"
+command = ["python3", "scripts/run.py", "start"]
+
+# Sweep immediately when an agent finishes; that is when merges just happened.
+[[events]]
+on = "pane.agent_status_changed"
+command = ["python3", "scripts/run.py", "nudge"]

@@ -1,0 +1,83 @@
+# herdr-branch-cleanup
+
+herdr-branch-cleanup is a [Herdr](https://herdr.dev) plugin that watches the git
+branch in every pane's repository. When a branch gets merged or deleted on
+GitHub, it checks out the default branch there automatically, so finished agent
+work never leaves a pane stranded on a dead branch.
+
+A background poller sweeps once a minute (and immediately after an agent
+finishes). For each repo it acts only when every safety gate passes:
+
+- no agent in that repo is `working` or `blocked`
+- the working tree is clean
+- the local tip is exactly the commit GitHub last saw (squash-merge safe: it
+  compares against the merged PR's head, not `git branch --merged`)
+- the checkout is not a linked git worktree (there the branch is the
+  worktree's identity, so the repo is only flagged, never switched)
+
+When a gate fails, nothing happens; the repo shows up as held, with the
+reason, on the status board.
+
+## Requirements
+
+- Herdr ≥ 0.7.0
+- `python3` (3.10+), `git`, and `gh` (authenticated: `gh auth status`) on PATH
+
+## Install
+
+```sh
+herdr plugin install dutifuldev/herdr-branch-cleanup
+```
+
+Or link a local checkout for development:
+
+```sh
+herdr plugin link /path/to/herdr-branch-cleanup
+```
+
+The poller starts itself the first time a pane opens in any session. No daemon
+setup is needed; it runs as a plain background process managed through the
+plugin's actions.
+
+## Usage
+
+The status board shows every tracked repo, its branch, and what the last sweep
+decided (`✓` checked out, `⏸` held with the reason, `·` skipped):
+
+```sh
+herdr plugin pane open branch-cleanup board
+```
+
+Actions, also bindable to keys:
+
+```sh
+herdr plugin action invoke branch-cleanup.start
+herdr plugin action invoke branch-cleanup.stop
+herdr plugin action invoke branch-cleanup.toggle
+herdr plugin action invoke branch-cleanup.cleanup-now
+```
+
+Example keybinding in `~/.config/herdr/config.toml`:
+
+```toml
+[[keys.command]]
+key = "prefix+b"
+type = "plugin_action"
+command = "branch-cleanup.board"
+description = "branch cleanup board"
+```
+
+## Configuration
+
+Optional, via `config.env` in the plugin config dir (print its path with
+`herdr plugin config-dir branch-cleanup`):
+
+```sh
+BRANCH_CLEANUP_INTERVAL=60      # seconds between sweeps (min 5)
+BRANCH_CLEANUP_DRY_RUN=1        # log what would happen, never switch branches
+BRANCH_CLEANUP_NOTIFY_ONLY=1    # detect and show on the board, never switch
+```
+
+## License
+
+[MIT](LICENSE)

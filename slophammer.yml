@@ -1,0 +1,45 @@
+python:
+  coverage:
+    threshold: 85
+    paths:
+      - src
+  complexity:
+    max: 8
+  dry:
+    max_findings: 0
+    paths:
+      - src
+    copied_blocks:
+      enabled: true
+      min_tokens: 100
+  mutation:
+    targets:
+      - src/herdr_branch_cleanup/core.py
+  dependency_boundaries:
+    - from: src/herdr_branch_cleanup/core.py
+      allow: []
+    - from: src/herdr_branch_cleanup/procio.py
+      allow: []
+    - from: src/herdr_branch_cleanup/gitio.py
+      allow:
+        - src/herdr_branch_cleanup/procio
+    - from: src/herdr_branch_cleanup/herdrio.py
+      allow:
+        - src/herdr_branch_cleanup/procio
+    - from: src/herdr_branch_cleanup/sweep.py
+      allow:
+        - src/herdr_branch_cleanup/core
+        - src/herdr_branch_cleanup/gitio
+        - src/herdr_branch_cleanup/herdrio
+        - src/herdr_branch_cleanup/procio
+    - from: src/herdr_branch_cleanup/daemon.py
+      allow:
+        - src/herdr_branch_cleanup/sweep
+    - from: src/herdr_branch_cleanup/board.py
+      allow:
+        - src/herdr_branch_cleanup/sweep
+    - from: src/herdr_branch_cleanup/cli.py
+      allow:
+        - src/herdr_branch_cleanup/board
+        - src/herdr_branch_cleanup/daemon
+        - src/herdr_branch_cleanup/sweep
