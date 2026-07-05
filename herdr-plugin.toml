@@ -1,6 +1,6 @@
 id = "branch-cleanup"
 name = "Branch Cleanup"
-version = "0.2.0"
+version = "0.2.1"
 min_herdr_version = "0.7.0"
 description = "Checks out the default branch in a pane's repo when its branch is merged or deleted on GitHub"
 platforms = ["linux", "macos"]
