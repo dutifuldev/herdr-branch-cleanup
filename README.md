@@ -5,8 +5,9 @@ branch in every pane's repository. When a branch gets merged or deleted on
 GitHub, it checks out the default branch there automatically, so finished agent
 work never leaves a pane stranded on a dead branch.
 
-A background poller sweeps once a minute (and immediately after an agent
-finishes). For each repo it acts only when every safety gate passes:
+A background poller sweeps every 10 minutes (and immediately after an agent
+finishes, which is when a merge most likely just happened). For each repo it
+acts only when every safety gate passes:
 
 - no agent in that repo is `working` or `blocked`
 - the working tree is clean
@@ -92,7 +93,7 @@ Optional, via `config.env` in the plugin config dir (print its path with
 `herdr plugin config-dir branch-cleanup`):
 
 ```sh
-BRANCH_CLEANUP_INTERVAL=60      # seconds between sweeps (min 5)
+BRANCH_CLEANUP_INTERVAL=600     # seconds between sweeps (default 10 min, min 5)
 BRANCH_CLEANUP_DRY_RUN=1        # log what would happen, never switch branches
 BRANCH_CLEANUP_NOTIFY_ONLY=1    # detect and show on the board, never switch
 ```

@@ -65,7 +65,7 @@ pub fn interval_from(env: &BTreeMap<String, String>) -> Duration {
     let seconds = env
         .get("BRANCH_CLEANUP_INTERVAL")
         .and_then(|value| value.parse::<f64>().ok())
-        .unwrap_or(60.0)
+        .unwrap_or(600.0)
         .max(5.0);
     Duration::from_secs_f64(seconds)
 }
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn interval_default_floor_and_garbage() {
-        assert_eq!(interval_from(&env(&[])), Duration::from_secs(60));
+        assert_eq!(interval_from(&env(&[])), Duration::from_secs(600));
         assert_eq!(
             interval_from(&env(&[("BRANCH_CLEANUP_INTERVAL", "120")])),
             Duration::from_secs(120)
@@ -272,7 +272,7 @@ mod tests {
         );
         assert_eq!(
             interval_from(&env(&[("BRANCH_CLEANUP_INTERVAL", "soon")])),
-            Duration::from_secs(60)
+            Duration::from_secs(600)
         );
     }
 
