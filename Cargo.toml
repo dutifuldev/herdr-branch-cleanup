@@ -6,6 +6,9 @@ rust-version = "1.85"
 license = "MIT"
 description = "Herdr plugin: checkout the default branch when a pane's branch is merged or deleted on GitHub"
 repository = "https://github.com/dutifuldev/herdr-branch-cleanup"
+readme = "README.md"
+keywords = ["herdr", "git", "branch", "cleanup", "plugin"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 serde_json = "1"
