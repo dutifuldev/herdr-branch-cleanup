@@ -31,15 +31,15 @@ reason, on the status board.
 ## Install
 
 ```sh
-herdr plugin install dutifuldev/herdr-branch-cleanup
+herdr plugin install osolmaz/herdr-branch-cleanup
 ```
 
 Herdr runs `cargo build --release` once during install. To pin a
-[release tag](https://github.com/dutifuldev/herdr-branch-cleanup/releases)
+[release tag](https://github.com/osolmaz/herdr-branch-cleanup/releases)
 instead of tracking `main`:
 
 ```sh
-herdr plugin install dutifuldev/herdr-branch-cleanup --ref <tag>
+herdr plugin install osolmaz/herdr-branch-cleanup --ref <tag>
 ```
 
 For a local checkout, build it yourself and link:

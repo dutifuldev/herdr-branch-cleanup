@@ -6,7 +6,7 @@ The herdr manifest builds `target/release/herdr-branch-cleanup` via the
 plugin's `[[build]]` step and launches that binary for every entrypoint.
 
 Slophammer standards apply; see
-https://raw.githubusercontent.com/dutifuldev/slophammer/refs/heads/main/docs/AGENT_ENTRYPOINT.md
+https://raw.githubusercontent.com/osolmaz/slophammer/refs/heads/main/docs/AGENT_ENTRYPOINT.md
 
 ## Commands to run before finishing
 
